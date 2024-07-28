@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import * as MediaLibrary from 'expo-media-library';
-import { StatusBar } from "expo-status-bar";
+import React, { useState, useEffect, useRef } from "react";
+import * as MediaLibrary from "expo-media-library";
 import { StyleSheet, Text, View, TextInput, Button, Alert } from "react-native";
 import * as FileSystem from "expo-file-system";
 import * as Crypto from "expo-crypto";
@@ -8,12 +7,12 @@ import { initializeApp } from "firebase/app";
 import {
   getFirestore,
   collection,
-  doc,
   getDocs,
-  setDoc,
-  deleteDoc,
+  // setDoc,
+  // deleteDoc,
+  // doc,
 } from "firebase/firestore";
-
+// import { StatusBar } from "expo-status-bar";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDA17dBpCFCJmCSHBI5vjfTNOspv8LY_70",
@@ -28,137 +27,113 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function App() {
-  const [uuid, setUuid] = useState("");
-  const [text, setText] = useState("");
+  //state
+  const [hasMediaPermission, setHasMediaPermission] = useState(null);
+  const [newUuid, setNewUuid] = useState(null);
+  const [localUuidFromFile, setLocalUuidFromFile] = useState(null);
+  const [fileSystemUuid, setFileSystemUuid] = useState("");
   const [pesquisaDocs, setPesquisaDocs] = useState([]);
-  const filePath = `${FileSystem.documentDirectory}.uuid.txt`;
-  const textFilePath = `${FileSystem.documentDirectory}.textfile.txt`;
-  const [hasPermission, setHasPermission] = useState(null);
-
+  //ref
+  const localFilePath = useRef(`${FileSystem.documentDirectory}uuid.txt`);
+  const fileMediaPath = useRef(null);
 
   useEffect(() => {
-    const initializeUuid = async () => {
-      try {
-        const fileExists = await FileSystem.getInfoAsync(filePath);
-        if (fileExists.exists) {
-          const fileContent = await FileSystem.readAsStringAsync(filePath);
-          setUuid(fileContent);
-        } else {
-          generateAndSaveUuid();
-        }
-      } catch (error) {
-        console.error("Failed to read or save the UUID file", error);
-      }
-    };
-
-    const readTextFromFile = async () => {
-      try {
-        const fileExists = await FileSystem.getInfoAsync(textFilePath);
-        if (fileExists.exists) {
-          const fileContent = await FileSystem.readAsStringAsync(textFilePath);
-          setText(fileContent);
-        }
-      } catch (error) {
-        console.error("Failed to read the text file", error);
-      }
-    };
-
-    const fetchPesquisaDocs = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "pesquisa"));
-        const docsArray = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setPesquisaDocs(docsArray);
-      } catch (error) {
-        console.error(
-          "Failed to fetch documents from pesquisa collection",
-          error
-        );
-      }
-    };
-
     const getPermissions = async () => {
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    }
+      setHasMediaPermission(status === "granted");
+    };
 
-    initializeUuid();
-    readTextFromFile();
-    fetchPesquisaDocs();
+    const initializeUuid = async () => {
+      const info = await FileSystem.getInfoAsync(localFilePath.current);
+      if (info.exists) {
+        const fileContent = await FileSystem.readAsStringAsync(
+          localFilePath.current
+        );
+        setLocalUuidFromFile(fileContent);
+      } else {
+        generateNewUuid();
+      }
+    };
+
+    // const fetchPesquisaDocs = async () => {
+    //   try {
+    //     const querySnapshot = await getDocs(collection(db, "pesquisa"));
+    //     const docsArray = querySnapshot.docs.map((doc) => ({
+    //       id: doc.id,
+    //       ...doc.data(),
+    //     }));
+    //     setPesquisaDocs(docsArray);
+    //   } catch (error) {
+    //     console.error(
+    //       "Failed to fetch documents from pesquisa collection",
+    //       error
+    //     );
+    //   }
+    // };
+
     getPermissions();
+    initializeUuid();
+    //fetchPesquisaDocs();
+    //getMediaPath();
   }, []);
 
-  const generateAndSaveUuid = async () => {
+  const generateNewUuid = async () => {
     const newUuid = Crypto.randomUUID();
-    try {
-      await FileSystem.writeAsStringAsync(filePath, newUuid, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      saveToMediaLibrary(filePath);
-      setUuid(newUuid);
-      console.log(filePath);
-    } catch (error) {
-      console.error("Failed to save the UUID file", error);
-    }
+    await saveUuid(newUuid);
+    setNewUuid(newUuid);
   };
 
-  const saveTextToFile = async () => {
-    try {
-      await FileSystem.writeAsStringAsync(textFilePath, text, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      console.log(textFilePath);
-    } catch (error) {
-      console.error("Failed to save the text file", error);
-    }
+  // const getMediaPath = async () => {
+  //   const asset = await MediaLibrary.createAssetAsync(filePath);
+  //   fileMediaPath.current = asset.uri;
+  // }
+
+  const saveUuid = async (uuid) => {
+    await FileSystem.writeAsStringAsync(localFilePath.current, uuid, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    // saveToMediaLibrary(filePath);
   };
 
-  const deleteFiles = async () => {
-    try {
-      await FileSystem.deleteAsync(filePath, { idempotent: true });
-      await FileSystem.deleteAsync(textFilePath, { idempotent: true });
-      setUuid("");
-      setText("");
-    } catch (error) {
-      console.error("Failed to delete the files", error);
-    }
+  const deleteLocalFile = async () => {
+    await FileSystem.deleteAsync(localFilePath.current, { idempotent: true });
   };
 
-  const saveToMediaLibrary = async (downloadedFile) => {
-    if (hasPermission !== 'granted') {
-      Alert.alert('Permission not granted to access media library');
-      return;
-    }
-    try {
-      //const downloadedFile = { uri: 'file://path/to/your/file' };
-      const asset = await MediaLibrary.createAssetAsync(downloadedFile.uri);
-      const album = await MediaLibrary.getAlbumAsync('Download');
-      if (album == null) {
-        await MediaLibrary.createAlbumAsync('Download', asset, false);
-      } else {
-        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
-      }
-      //Alert.alert('File saved successfully');
-    } catch (e) {
-      //Alert.alert('Error saving file', e.message);
-    }
-  };
+  // const saveToMediaLibrary = async (file) => {
+  //   if (hasMediaPermission === false) {
+  //     Alert.alert("Sem permissão para salvar");
+  //     return;
+  //   }
+  //   try {
+  //     const asset = await MediaLibrary.createAssetAsync(file);
+  //     //const album = await MediaLibrary.getAlbumAsync("Download");
+  //     if (album == null) {
+  //       await MediaLibrary.createAlbumAsync("Download", asset, false);
+  //     } else {
+  //       await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+  //     }
+  //     console.log(`File saved to: ${asset.uri}`);
+  //   } catch {}
+  // };
 
   return (
     <View style={styles.container}>
-      <TextInput
+      <View>
+        {localUuidFromFile ? <Text>localUuidFromFile: {localUuidFromFile}</Text> : <Text>localUuidFromFile: {"\n???"}</Text>}
+        {newUuid ? <Text>newUuid: {newUuid}</Text> : <Text>newUuid: {'\n???\n'}</Text>}
+        {/* {fileSystemUuid ? <Text>file system: {fileSystemUuid}</Text> : <Text>file system: {'\n???\n'}</Text>} */}
+        {/* {text ? <Text>storage: {"\n?????"}</Text> : null} */}
+        {/* {text ? <Text>firebase: {"\n?????\n\n"}</Text> : null} */}
+      </View>
+      {/* <TextInput
         style={styles.input}
         placeholder="Enter some text"
         value={text}
         onChangeText={setText}
-      />
-      <Button title="Save Text to Hidden File" onPress={saveTextToFile} />
-      <Button title="Generate and Save UUID" onPress={generateAndSaveUuid} />
-      <Button title="Delete Files" onPress={deleteFiles} color="red" />
-      {uuid ? <Text>UUID: {uuid}</Text> : null}
-      {text ? <Text>Text: {text}</Text> : null}
+      /> */}
+      {/* <Button title="Save Text to Hidden File" onPress={saveTextToFile} /> */}
+      {/* <Button title="Generate and Save UUID" onPress={saveUuid(newUuid)} /> */}
+      {<Button title="Delete local Files" onPress={deleteLocalFile} color="red" />}
     </View>
   );
 }
