@@ -19,7 +19,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.k43g0n.rncampinapolispesquisa"
+      "package": "com.k43g0n.rncampinapolispesquisa",
+      "permissions": [
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "MANAGE_MEDIA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
